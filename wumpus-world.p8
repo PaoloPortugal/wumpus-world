@@ -3,7 +3,7 @@ version 43
 __lua__
 function _init()
 -- runs once at the start
-	local m=10
+	local m=20
 	local n=20
 
 	local reachable={
@@ -11,7 +11,7 @@ function _init()
 		{tile=-1,p=0.01} -- wumpus
 	}
 	local other={
-		{tile=-2,p=0.02} -- pit
+		{tile=-2,p=0.20} -- pit
 	}
 	
 	world=make_world(m,n,reachable,other)
@@ -31,21 +31,17 @@ function _draw()
 			local x = (j-1)*6
 			local y = (i-1)*6
 			local t = world[i][j].tile
+
 			if t == -1 then
-				print("w",x,y,8)
+				print("w", x, y, 8)      -- wumpus
 			elseif t == -2 then
-				print("p",x,y,2)
+				print("p", x, y, 2)      -- pit
 			elseif t == 1 then
-				print("g",x,y,10)
-			elseif world[i][j].stench then
-				print("s",x,y,7)
-			elseif world[i][j].breeze then
-				print("b",x,y,7)
-			elseif world[i][j].glitter then
-				print("*",x,y,11)
-			else
-				print(".",x,y,5)
+				print("g", x, y, 10)     -- gold
+			elseif t == 0 then
+				print(".", x, y, 5)      -- safe / empty
 			end
+			-- nil tiles are skipped (no print)
 		end
 	end
 
@@ -58,23 +54,19 @@ function make_world(m, n, reachable, other)
 	local world=make_empty_world(m,n) -- first we make an empty world
 
 	local reachables=place_things(world,reachable)	-- then we place the things the player must be able to reach
-	
-	world[1][1].tile=0
-	world[1][1].visible=true
+
+	place_things(world,other) -- now we finally place all the stuff that doesnt need to be reachable
+
 	local safe_cells={}
 	add(safe_cells,{i=1,j=1})
 	
 	for _,r in ipairs(reachables) do -- now we carve out paths of safe tiles from each reachable to the safe tiles we know
 		best=find_nearest_safe_cell(safe_cells,r.i,r.j)
-		new_safe_cells=make_safe_path(world,r.i,r.j,best.i,best.j)
+		new_safe_cells=make_safe_path(world,r.i,r.j,best.i,best.j,other)
 		foreach(new_safe_cells, function(cell)
 			add(safe_cells, cell)
 		end)
 	end
-	
-	place_things(world,other) -- now we finally place all the stuff that doesnt need to be reachable
-
-	world[1][1].tile=0 -- finally make the (1,1) tile safe again just in case
 	
 	for i=1,m do -- now we flag the tiles with whatever they need (stench, breeze, etc)
 		for j=1,n do
@@ -106,6 +98,9 @@ function make_empty_world(m, n)
 		end
 	end
 	
+	world[1][1].tile=0
+	world[1][1].visible=true
+
 	return world
 	
 end
@@ -123,7 +118,7 @@ function place_things(world, things)
 	for i=1,m do
 		for j=1,n do
 			if world[i][j].tile==nil then
-				tile=make_tile(cumulative)
+				tile=decide_tile(cumulative)
 				if tile~=nil then
 					add(placed_things,{i=i,j=j})
 					world[i][j].tile=tile
@@ -151,50 +146,100 @@ function find_nearest_safe_cell(safe_cells, i, j)
 
 end
 
-function make_safe_path(world, s_i, s_j, d_i, d_j)
+function make_safe_path(world, s_i, s_j, d_i, d_j, overwritable)
 -- builds a path of safe tiles from (s_i, s_j) to (d_i, d_j)
 -- imma be honest this one's all chatgpt ive got no idea what happens here
 
 	local i, j = s_i, s_j
-	local steps = 0
-	local max_steps = (#world + #world[1]) * 4
 	local new_safe = {}
 
+	-- build quick lookup set for overwritable tile types
+	local overwritable_tiles = {}
+	for _, entry in ipairs(overwritable) do
+		overwritable_tiles[entry.tile] = true
+	end
+
+	-- loop until we reach the goal (or break on safety)
+	local steps = 0
+	local max_steps = (#world + #world[1]) * 5
+
 	while (i ~= d_i or j ~= d_j) and steps < max_steps do
-		local dirs = {{1,0},{-1,0},{0,1},{0,-1}}
-		
-		-- bias toward target but allow randomness
-		if rnd() < 0.6 then
-			if i < d_i then dirs[1] = {1,0} end
-			if i > d_i then dirs[2] = {-1,0} end
-			if j < d_j then dirs[3] = {0,1} end
-			if j > d_j then dirs[4] = {0,-1} end
+		-- mark current tile as safe if appropriate (skip start & goal)
+		if not (i == s_i and j == s_j) and not (i == d_i and j == d_j) then
+			local t = world[i][j].tile
+			if t == nil or t == 0 or overwritable_tiles[t] then
+				world[i][j].tile = 0
+				add(new_safe, {i = i, j = j})
+			end
 		end
 
-		-- pick random direction
-		local d = dirs[flr(rnd(4))+1]
-		local ni, nj = i + d[1], j + d[2]
-		
-		if world[ni] and world[ni][nj] then
-			i, j = ni, nj
-			-- only carve safe path if it's not start/end and not something special
-			local t = world[i][j].tile
-			if not (i == s_i and j == s_j) and not (i == d_i and j == d_j) then
-				if t == nil or t == 0 then
-					world[i][j].tile = 0
-					add(new_safe, {i=i,j=j})
+		-- compute direction toward goal
+		local di = d_i - i
+		local dj = d_j - j
+
+		-- prefer direction toward goal
+		local primary_dir
+		if abs(di) > abs(dj) then
+			primary_dir = {di > 0 and 1 or -1, 0}
+		else
+			primary_dir = {0, dj > 0 and 1 or -1}
+		end
+
+		-- list of all possible orthogonal moves
+		local dirs = {
+			{1,0}, {-1,0}, {0,1}, {0,-1}
+		}
+
+		-- high randomness: 60% chance to go random, else toward goal
+		local dir
+		if rnd() < 0.6 then
+			dir = dirs[flr(rnd(#dirs)) + 1]
+		else
+			dir = primary_dir
+		end
+
+		-- apply move with bounds clamp
+		local ni = mid(1, i + dir[1], #world)
+		local nj = mid(1, j + dir[2], #world[1])
+
+		-- if we didn’t move (edge hit), pick another random valid move
+		if ni == i and nj == j then
+			for tries = 1, 4 do
+				local alt = dirs[flr(rnd(#dirs)) + 1]
+				local ai = mid(1, i + alt[1], #world)
+				local aj = mid(1, j + alt[2], #world[1])
+				if ai ~= i or aj ~= j then
+					ni, nj = ai, aj
+					break
 				end
 			end
 		end
 
+		i, j = ni, nj
 		steps += 1
 	end
 
+	-- optional: a few small extensions beyond the goal for natural look
+	local extras = flr(rnd(4)) -- 0..3 extra steps
+	for k = 1, extras do
+		local dirs = {{1,0},{-1,0},{0,1},{0,-1}}
+		local dir = dirs[flr(rnd(#dirs)) + 1]
+		local ni = mid(1, i + dir[1], #world)
+		local nj = mid(1, j + dir[2], #world[1])
+
+		if not (ni == s_i and nj == s_j) and not (ni == d_i and nj == d_j) then
+			local t = world[ni][nj].tile
+			if t == nil or t == 0 or overwritable_tiles[t] then
+				world[ni][nj].tile = 0
+				add(new_safe, {i = ni, j = nj})
+			end
+		end
+	end
+
 	return new_safe
-	
 end
 
-function make_tile(probs)
+function decide_tile(probs)
 -- defines what to put in a tile
 
 	local number=rnd()
