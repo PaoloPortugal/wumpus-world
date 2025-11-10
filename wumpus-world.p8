@@ -16,36 +16,70 @@ function _init()
 	
 	world=make_world(m,n,reachable,other)
 
+	player=make_player(world)
+
 end
 
 function _update()
 -- runs 30 times per second
+	handle_input(player, world)
 end
 
 function _draw()
 -- runs at 30fps
+    cls()
+    local m=#world
+    local n=#world[1]
 
-	cls()
-	for i=1,#world do
-		for j=1,#world[i] do
-			local x = (j-1)*6
-			local y = (i-1)*6
-			local t = world[i][j].tile
+    for i=1,m do
+        for j=1,n do
+            local cell = world[i][j]
+            local c=" "
+            local col=7 -- default color
 
-			if t == -1 then
-				print("w", x, y, 8)      -- wumpus
-			elseif t == -2 then
-				print("p", x, y, 2)      -- pit
-			elseif t == 1 then
-				print("g", x, y, 10)     -- gold
-			elseif t == 0 then
-				print(".", x, y, 5)      -- safe / empty
-			end
-			-- nil tiles are skipped (no print)
-		end
-	end
+            if cell.visible then
+                if player.i==i and player.j==j then
+                    c="@"
+                    col=8
+                elseif cell.tile==nil then
+                    c="#"
+                    col=5
+                elseif cell.tile==1 then
+                    c="$"
+                    col=10
+                elseif cell.tile==-1 then
+                    c="W"
+                    col=9
+                elseif cell.tile==-2 then
+                    c="P"
+                    col=6
+                else
+                    c="."
+                    col=7
+                end
 
+                if player.i~=i or player.j~=j then
+                    if cell.glitter then
+                        c="*"
+                        col=11
+                    elseif cell.stench then
+                        c="^"
+                        col=9
+                    elseif cell.breeze then
+                        c="~"
+                        col=12
+                    end
+                end
+            end
+
+            print(c, j*8, i*8, col)
+        end
+    end
+
+    print("Arrows: "..player.arrows,0,70,7)
+    print("Score: "..player.score,0,78,7)
 end
+
 
 
 function make_world(m, n, reachable, other)
@@ -272,20 +306,18 @@ end
 function flag_adjacent_tiles(i, j, world)
 -- adds the flags for tiles adjacent to wumpus, pit, gold
 
-	local tile=world[i][j].tile
-
 	for _,delta in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
 		
 		local new_i=i+delta[1]
 		local new_j=j+delta[2]
 		
-		if world[new_i] and world[new_i][new_j] then -- checks the tile exists
+		if world[new_i] and world[new_i][new_j] and world[new_i][new_j].tile~=nil then -- checks the tile exists and that its not a wall
 			
-			if tile==1 then
+			if world[i][j].tile==1 then
 				world[new_i][new_j].glitter=true
-			elseif tile==-1 then
+			elseif world[i][j].tile==-1 then
 				world[new_i][new_j].stench=true
-			elseif tile==-2 then
+			elseif world[i][j].tile==-2 then
 				world[new_i][new_j].breeze=true
 			end
 				
@@ -295,6 +327,187 @@ function flag_adjacent_tiles(i, j, world)
 
 end
 
+function make_player(world)
+-- makes a new player character
+
+	local arrows=count_wumpuses(world)
+
+	local player={i=1,j=1,facing=3,arrows=arrows,score=0} -- the player starts at spawn, facing down, with the same amount of arrows as wumpuses in the world, with 0 score
+
+	return player
+
+end
+
+function count_wumpuses(world)
+-- counts the amount of wumpuses spawned in the current world
+
+	local count=0
+	local m=#world
+	local n=#world[1]
+
+	for i=1,m do
+		for j=1,n do
+			if world[i][j].tile==-1 then -- wumpus on this tile
+				count+=1
+			end
+		end
+	end
+
+	return count
+
+end
+
+function handle_input(player, world)
+-- does different things depending on what the player presses
+
+	-- first lets do movement
+	move(player,world)
+
+	-- now let's see if the player wants to shoot an arrow
+	if btnp(4) then -- the player is pressing the fire key (Z)
+		shoot_arrow(player,world)
+	end
+
+end
+
+function move(player, world)
+-- tries to move the player in a certain direction, or makes them look in that direction
+
+	local delta_i,delta_j=0,0
+
+	if btnp(5) then -- the player is pressing the turn key (X)
+		for dir=0,3 do -- we check the three directions the player could face
+			if btnp(dir) then
+				player.facing=dir
+				break -- we end the loop as soon as we find the direction the player is facing
+			end
+		end
+	else -- the player is not pressing the turn key
+		if btnp(0) then -- left
+			delta_j=-1
+			player.facing=0
+		elseif btnp(1) then -- right
+			delta_j=1
+			player.facing=1
+		elseif btnp(2) then -- up
+			delta_i=-1
+			player.facing=2
+		elseif btnp(3) then -- down
+			delta_i=1
+			player.facing=3
+		end
+	end
+
+	local new_i=player.i+delta_i
+	local new_j=player.j+delta_j
+
+	if new_i~=player.i or new_j~=player.j then
+
+		if world[new_i] and world[new_i][new_j] and world[new_i][new_j].tile~=nil then
+			player.i=new_i
+			player.j=new_j
+
+			if world[new_i][new_j].tile==1 then -- check for gold in the tile
+				collect_gold(player,world,new_i,new_j)
+			end
+
+			see_cell(player,world)
+		end
+	end
+
+end
+
+function see_cell(player, world)
+	-- makes the cell the player stepped into visible
+	local i=player.i
+	local j=player.j
+
+	world[i][j].visible=true
+
+	for _,delta in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
+		local adj_i=i+delta[1]
+		local adj_j=j+delta[2]
+
+		if world[adj_i] and world[adj_i][adj_j] and world[adj_i][adj_j].tile==nil then
+			world[adj_i][adj_j].visible=true -- if an adjacent cell is a wall we make it visible as well
+		end
+	end
+end
+
+function shoot_arrow(player, world)
+	if player.arrows>0 then
+		local dir=player.facing
+		local delta_i,delta_j=0,0
+
+		if dir==0 then -- left
+			delta_j=-1
+		elseif dir==1 then -- right
+			delta_j=1
+		elseif dir==2 then -- up
+			delta_i=-1
+		elseif dir==3 then -- down
+			delta_i=1
+		end
+
+		local target_i=player.i+delta_i
+		local target_j=player.j+delta_j
+
+		if world[target_i] and world[target_i][target_j] then
+
+			if world[target_i][target_j].tile~=nil then
+				player.arrows-=1
+
+				while world[target_i] and world[target_i][target_j] do
+
+					if world[target_i][target_j].tile==-1 then -- theres a wumpus here
+						kill_wumpus(player,world,target_i,target_j)
+						break
+					elseif world[target_i][target_j].tile==nil then
+						break -- we end the loop if we hit a wall
+					end
+
+					target_i+=delta_i
+					target_j+=delta_j
+				end
+			end
+		end
+	end
+end
+
+function kill_wumpus(player, world, i, j)
+-- kills a wumpus on the target (i, j)
+	world[i][j].tile=0 -- now its a safe tile
+	world[i][j].dead_wumpus=true
+	world[i][j].visible=true
+
+	for _,delta in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
+		local adj_i=i+delta[1]
+		local adj_j=j+delta[2]
+
+		if world[adj_i] and world[adj_i][adj_j] then
+			world[adj_i][adj_j].stench=false -- we remove the stench from the adjacent tiles
+		end
+	end
+
+	player.score+=1000
+end
+
+function collect_gold(player, world, i, j)
+-- collects a gold bar on the target (i, j)
+	world[i][j].tile=0 -- now its a regular safe tile, no gold
+	world[i][j].collected_gold=true
+
+	for _,delta in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
+		local adj_i=i+delta[1]
+		local adj_j=j+delta[2]
+
+		if world[adj_i] and world[adj_i][adj_j] then
+			world[adj_i][adj_j].glitter=false -- we remove the glitter from the adjacent tiles
+		end
+	end
+
+	player.score+=500
+end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
