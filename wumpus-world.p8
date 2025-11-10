@@ -1,6 +1,8 @@
 pico-8 cartridge // http://www.pico-8.com
 version 43
 __lua__
+-- main
+
 function _init()
 -- runs once at the start
 	local m=20
@@ -80,7 +82,8 @@ function _draw()
     print("Score: "..player.score,0,78,7)
 end
 
-
+-->8
+-- worldgen
 
 function make_world(m, n, reachable, other)
 -- makes a new world
@@ -236,7 +239,7 @@ function make_safe_path(world, s_i, s_j, d_i, d_j, overwritable)
 		local ni = mid(1, i + dir[1], #world)
 		local nj = mid(1, j + dir[2], #world[1])
 
-		-- if we didn’t move (edge hit), pick another random valid move
+		-- if we didnt move (edge hit), pick another random valid move
 		if ni == i and nj == j then
 			for tries = 1, 4 do
 				local alt = dirs[flr(rnd(#dirs)) + 1]
@@ -357,6 +360,9 @@ function count_wumpuses(world)
 
 end
 
+-->8
+-- gameplay
+
 function handle_input(player, world)
 -- does different things depending on what the player presses
 
@@ -375,7 +381,7 @@ function move(player, world)
 
 	local delta_i,delta_j=0,0
 
-	if btnp(5) then -- the player is pressing the turn key (X)
+	if btn(5) then -- the player is pressing the turn key (X)
 		for dir=0,3 do -- we check the three directions the player could face
 			if btnp(dir) then
 				player.facing=dir
@@ -507,6 +513,65 @@ function collect_gold(player, world, i, j)
 	end
 
 	player.score+=500
+end
+
+-->8
+-- visuals
+
+function draw_alive()
+
+	cls()
+    local m=#world
+    local n=#world[1]
+
+    for i=1,m do
+        for j=1,n do
+            local cell = world[i][j]
+            local c=" "
+            local col=7 -- default color
+
+            if cell.visible then
+                if player.i==i and player.j==j then
+                    c="@"
+                    col=8
+                elseif cell.tile==nil then
+                    c="#"
+                    col=5
+                elseif cell.tile==1 then
+                    c="$"
+                    col=10
+                elseif cell.tile==-1 then
+                    c="w"
+                    col=9
+                elseif cell.tile==-2 then
+                    c="p"
+                    col=6
+                else
+                    c="."
+                    col=7
+                end
+
+                if player.i~=i or player.j~=j then
+                    if cell.glitter then
+                        c="*"
+                        col=11
+                    elseif cell.stench then
+                        c="^"
+                        col=9
+                    elseif cell.breeze then
+                        c="~"
+                        col=12
+                    end
+                end
+            end
+
+            print(c, j*8, i*8, col)
+        end
+    end
+
+    print("arrows: "..player.arrows,0,70,7)
+    print("score: "..player.score,0,78,7)
+
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
