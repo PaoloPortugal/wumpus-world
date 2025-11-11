@@ -29,7 +29,7 @@ function _update()
     if state==2 or state==-1 then -- dead or win
         handle_game_end_input()
     elseif state==1 then -- alive
-        handle_alive_input()
+        handle_alive_input(player,world)
     else -- state==0, in main menu
         handle_menu_input()
     end
@@ -77,7 +77,7 @@ function make_world(m, n, reachable, other)
 		end
 	end
 	
-	world.wumpus_amount,world.gold_amount=count_wumpuses(world)
+	world.wumpus_amount,world.gold_amount=count_wumpuses_and_gold(world)
 
 	return world
 	
@@ -397,7 +397,7 @@ function move(player, world)
 
 			if world[new_i][new_j].tile==1 then -- check for gold in the tile
 				collect_gold(player,world,new_i,new_j)
-            elseif world[new_i][new_j].tile==-1 or world[new_i][new_j].tile==-2 -- check for a wumpus or pit in this tile
+            elseif world[new_i][new_j].tile==-1 or world[new_i][new_j].tile==-2 then -- check for a wumpus or pit in this tile
                 lose()
             end
 
