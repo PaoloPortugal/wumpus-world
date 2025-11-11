@@ -5,23 +5,18 @@ __lua__
 
 function _init()
 -- runs once at the start
-	local m=20
-	local n=20
+	m=20
+	n=20
 
-	local reachable={
+	reachable={
 		{tile=1,p=0.05}, -- gold
 		{tile=-1,p=0.01} -- wumpus
 	}
-	local other={
+	other={
 		{tile=-2,p=0.20} -- pit
 	}
 	
-	world=make_world(m,n,reachable,other)
-
-	player=make_player(world)
-
-	state=1
-
+	game_start(m,n,reachable,other)
 end
 
 function _update()
@@ -50,6 +45,15 @@ end
 
 -->8
 -- worldgen
+
+function game_start(m, n, reachable, other)
+-- gets everything ready for a new game
+    world=make_world(m,n,reachable,other)
+
+	player=make_player(world)
+
+	state=1
+end
 
 function make_world(m, n, reachable, other)
 -- makes a new world
@@ -339,6 +343,11 @@ end
 
 function handle_game_end_input()
 -- handles the player input when they are in-between games, they either won or died
+    if btnp(4) then -- player presses Z (play again)
+        game_start(m,n,reachable,other)
+    elseif btnp(5) then -- player presses X (back to menu)
+        state=0
+    end
 end
 
 function handle_alive_input(player, world)
