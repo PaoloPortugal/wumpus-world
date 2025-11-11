@@ -20,66 +20,32 @@ function _init()
 
 	player=make_player(world)
 
+	state=1
+
 end
 
 function _update()
 -- runs 30 times per second
-	handle_input(player, world)
+    if state==2 or state==-1 then -- dead or win
+        handle_game_end_input()
+    elseif state==1 then -- alive
+        handle_alive_input()
+    else -- state==0, in main menu
+        handle_menu_input()
+    end
 end
 
 function _draw()
 -- runs at 30fps
-    cls()
-    local m=#world
-    local n=#world[1]
-
-    for i=1,m do
-        for j=1,n do
-            local cell = world[i][j]
-            local c=" "
-            local col=7 -- default color
-
-            if cell.visible then
-                if player.i==i and player.j==j then
-                    c="@"
-                    col=8
-                elseif cell.tile==nil then
-                    c="#"
-                    col=5
-                elseif cell.tile==1 then
-                    c="$"
-                    col=10
-                elseif cell.tile==-1 then
-                    c="W"
-                    col=9
-                elseif cell.tile==-2 then
-                    c="P"
-                    col=6
-                else
-                    c="."
-                    col=7
-                end
-
-                if player.i~=i or player.j~=j then
-                    if cell.glitter then
-                        c="*"
-                        col=11
-                    elseif cell.stench then
-                        c="^"
-                        col=9
-                    elseif cell.breeze then
-                        c="~"
-                        col=12
-                    end
-                end
-            end
-
-            print(c, j*8, i*8, col)
-        end
+    if state==2 then -- win
+        draw_win(player)
+    elseif state==1 then -- alive
+        draw_alive(player,world)
+    elseif state==0 then -- in main menu
+        draw_menu()
+    else -- state==-1, dead
+        draw_dead(player,world)
     end
-
-    print("Arrows: "..player.arrows,0,70,7)
-    print("Score: "..player.score,0,78,7)
 end
 
 -->8
@@ -111,6 +77,8 @@ function make_world(m, n, reachable, other)
 		end
 	end
 	
+	world.wumpus_amount,world.gold_amount=count_wumpuses(world)
+
 	return world
 	
 end
@@ -137,6 +105,9 @@ function make_empty_world(m, n)
 	
 	world[1][1].tile=0
 	world[1][1].visible=true
+
+	world.wumpus_amount=0
+	world.gold_amount=0
 
 	return world
 	
@@ -333,7 +304,7 @@ end
 function make_player(world)
 -- makes a new player character
 
-	local arrows=count_wumpuses(world)
+	local arrows=world.wumpus_amount
 
 	local player={i=1,j=1,facing=3,arrows=arrows,score=0} -- the player starts at spawn, facing down, with the same amount of arrows as wumpuses in the world, with 0 score
 
@@ -341,30 +312,37 @@ function make_player(world)
 
 end
 
-function count_wumpuses(world)
--- counts the amount of wumpuses spawned in the current world
+function count_wumpuses_and_gold(world)
+-- counts the amount of wumpuses and gold spawned in the current world
 
-	local count=0
+	local wumpuses=0
+	local gold=0
 	local m=#world
 	local n=#world[1]
 
 	for i=1,m do
 		for j=1,n do
 			if world[i][j].tile==-1 then -- wumpus on this tile
-				count+=1
-			end
+				wumpuses+=1
+            elseif world[i][j].tile==1 then -- gold on this tile
+                gold+=1
+            end
 		end
 	end
 
-	return count
+	return wumpuses,gold
 
 end
 
 -->8
 -- gameplay
 
-function handle_input(player, world)
--- does different things depending on what the player presses
+function handle_game_end_input()
+-- handles the player input when they are in-between games, they either won or died
+end
+
+function handle_alive_input(player, world)
+-- handles the player input when they are alive and playing the game
 
 	-- first lets do movement
 	move(player,world)
@@ -374,6 +352,10 @@ function handle_input(player, world)
 		shoot_arrow(player,world)
 	end
 
+end
+
+function handle_menu_input()
+-- handles the player input when they are in the main menu
 end
 
 function move(player, world)
@@ -415,7 +397,9 @@ function move(player, world)
 
 			if world[new_i][new_j].tile==1 then -- check for gold in the tile
 				collect_gold(player,world,new_i,new_j)
-			end
+            elseif world[new_i][new_j].tile==-1 or world[new_i][new_j].tile==-2 -- check for a wumpus or pit in this tile
+                lose()
+            end
 
 			see_cell(player,world)
 		end
@@ -486,6 +470,8 @@ function kill_wumpus(player, world, i, j)
 	world[i][j].dead_wumpus=true
 	world[i][j].visible=true
 
+	world.wumpus_amount-=1
+
 	for _,delta in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
 		local adj_i=i+delta[1]
 		local adj_j=j+delta[2]
@@ -496,6 +482,10 @@ function kill_wumpus(player, world, i, j)
 	end
 
 	player.score+=1000
+
+	if world.wumpus_amount==0 then
+	    win()
+    end
 end
 
 function collect_gold(player, world, i, j)
@@ -513,13 +503,29 @@ function collect_gold(player, world, i, j)
 	end
 
 	player.score+=500
+
+	if world.gold_amount==0 and player.arrows==0 then
+	   win()
+    end
+end
+
+function win()
+   state=2 -- game clear state
+end
+
+function lose()
+    state=-1 -- dead state
 end
 
 -->8
 -- visuals
 
-function draw_alive()
+function draw_win(player)
+-- game clear visuals
+end
 
+function draw_alive(player, world)
+-- game visuals
 	cls()
     local m=#world
     local n=#world[1]
@@ -573,6 +579,15 @@ function draw_alive()
     print("score: "..player.score,0,78,7)
 
 end
+
+function draw_menu()
+-- main menu visuals
+end
+
+function draw_dead(player, world)
+-- dead player visuals
+end
+
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
