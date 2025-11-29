@@ -5,18 +5,23 @@ __lua__
 
 function _init()
 -- runs once at the start
-	m=20
-	n=20
+	menu_index=0
+	current_menu=0 -- start at main menu
+	state=0
 
-	reachable={
-		{tile=1,p=0.05}, -- gold
-		{tile=-1,p=0.01} -- wumpus
+	main_menu_items={
+		{text="Play"},
+		{text="Options"},
+		{text="Instructions"}
 	}
-	other={
-		{tile=-2,p=0.20} -- pit
+
+	options_menu_items={
+		{text="Rows",value=20},
+		{text="Columns",value=20},
+		{text="Gold spawn probability (%)",value=10},
+		{text="Wumpus spawn probability (%)",value=5},
+		{text="Pit spawn probability (%)",value=20}
 	}
-	
-	game_start(m,n,reachable,other)
 end
 
 function _update()
@@ -25,8 +30,8 @@ function _update()
         handle_game_end_input()
     elseif state==1 then -- alive
         handle_alive_input(player,world)
-    else -- state==0, in main menu
-        handle_menu_input()
+    else -- state==0, in menu
+        handle_general_menu_input(current_menu,menu_index)
     end
 end
 
@@ -46,13 +51,26 @@ end
 -->8
 -- worldgen
 
-function game_start(m, n, reachable, other)
+function game_start()
 -- gets everything ready for a new game
+
+	m=options_menu_items[1].value
+	n=options_menu_items[2].value
+
+	reachable={
+		{tile=1,p=options_menu_items[3].value/100}, -- gold
+		{tile=-1,p=options_menu_items[4].value/100} -- wumpus
+	}
+	other={
+		{tile=-2,p=options_menu_items[5].value/100} -- pit
+	}
+
     world=make_world(m,n,reachable,other)
 
 	player=make_player(world)
 
 	state=1
+
 end
 
 function make_world(m, n, reachable, other)
@@ -344,7 +362,7 @@ end
 function handle_game_end_input()
 -- handles the player input when they are in-between games, they either won or died
     if btnp(4) then -- player presses Z (play again)
-        game_start(m,n,reachable,other)
+        game_start()
     elseif btnp(5) then -- player presses X (back to menu)
         state=0
     end
@@ -363,8 +381,62 @@ function handle_alive_input(player, world)
 
 end
 
-function handle_menu_input()
--- handles the player input when they are in the main menu
+function handle_general_menu_input()
+-- handles general menu navigation
+
+	-- this one was a bit optimized by ChatGPT, mainly this part where I get the menu_items
+	local menu_items = (current_menu==0 and main_menu_items) or options_menu_items
+
+    if btnp(5) then
+        current_menu = 0
+        menu_index = 1
+        return
+    end
+
+    if menu_items then
+        if btnp(2) and menu_index>1 then menu_index -= 1 end
+        if btnp(3) and menu_index<#menu_items then menu_index += 1 end
+
+        -- call the correct handler once
+        if current_menu==0 then
+            handle_main_menu_input(menu_items)
+        else
+            handle_options_menu_input(menu_items)
+        end
+    end
+end
+
+function handle_main_menu_input(menu_items)
+	if btnp(4) then -- the player is pressing the "confirm" key (Z)
+		if menu_index==1 then -- "Play" is selected
+			game_start()
+		elseif menu_index==2 then -- "Options" is selected
+			current_menu=1
+		else -- menu_index==3, "Instructions" is selected
+			current_menu=2
+		end
+	end
+end
+
+function handle_options_menu_input(menu_items)
+-- handles the player input when they are in the options menu
+	if btn(0) and menu_items[menu_index].value>1 then -- left
+		menu_items[menu_index].value-=1
+	elseif btn(1) then -- right
+		if menu_index>2 then
+			local sum=0
+			sum+=menu_items[3].value -- gold prob
+			sum+=menu_items[4].value -- wumpus prob
+			sum+=menu_items[5].value -- pit prob
+			if sum<100 then
+				menu_items[menu_index].value+=1
+			end
+		else
+			if menu_items[menu_index].value<100 then
+				menu_items[menu_index].value+=1
+			end
+		end
+	end
 end
 
 function move(player, world)
@@ -590,7 +662,68 @@ function draw_alive(player, world)
 end
 
 function draw_menu()
--- main menu visuals
+-- chooses which menu to draw
+    if current_menu == 0 then -- Main menu
+        draw_main_menu()
+    elseif current_menu == 1 then -- Options
+        draw_options_menu()
+    else -- current_menu==2, Instructions
+        draw_instructions_menu()
+    end
+end
+
+
+function draw_main_menu()
+    cls() -- clear screen
+
+    -- title
+    local title = "HUNT THE WUMPUS"
+    local title_x = 64 - (#title*4) -- 4 pixels per char in Pico-8
+    print(title, title_x, 10, 7)
+
+    -- menu items
+    local menu_y = 50
+    for i, item in ipairs(main_menu_items) do
+        local text_x = 64 - (#item.text*4)
+        local color = (menu_index == i) and 8 or 7
+        print(item.text, text_x, menu_y, color)
+        menu_y += 10
+end
+
+end
+
+function draw_options_menu()
+    cls()  -- clear screen
+
+    -- draw each option
+    for i, item in ipairs(options_menu_items) do
+        local y = 24 + (i-1)*10  -- vertical spacing
+
+        -- highlight selected
+        if menu_index == i then
+            rectfill(10, y-1, 118, y+7, 3)  -- highlight background
+            print("▶", 2, y, 7)
+        end
+
+        -- option name
+        print(item.text, 16, y, 7)
+
+        -- option value as slider
+        local slider_x = 100
+        print(tostr(item.value), slider_x, y, 7)
+
+        -- optional: small visual slider bar
+        rect(90, y, 98, y+6, 7)
+        rectfill(90, y, 90 + flr(item.value/10), y+6, 8)
+    end
+
+    -- instruction at bottom
+    print("Use arrow keys to adjust, X to go back", 8, 90, 7)
+end
+
+
+function draw_instructions_menu()
+
 end
 
 function draw_dead(player, world)
