@@ -385,19 +385,29 @@ function handle_alive_input(player, world)
 
 end
 
+
 function handle_general_menu_input()
--- handles general menu navigation
+-- handles the base input for menus
+-- this one was a bit optimized by ChatGPT, mainly this part where I get the menu_items
+    -- get the appropriate menu items for scrolling and selection
+    local menu_items = (current_menu==0 and main_menu_items) or 
+                       (current_menu==1 and options_menu_items) or nil
 
-	-- this one was a bit optimized by ChatGPT, mainly this part where I get the menu_items
-	local menu_items = (current_menu==0 and main_menu_items) or options_menu_items
-
+    -- universal back button
     if btnp(5) then
         current_menu = 0
         menu_index = 1
         return
     end
 
+    if current_menu == 2 then
+        -- instruction menu scrolling
+        handle_instruction_menu_input()
+        return
+    end
+
     if menu_items then
+        -- up/down navigation
         if btnp(2) and menu_index>1 then menu_index -= 1 end
         if btnp(3) and menu_index<#menu_items then menu_index += 1 end
 
@@ -443,6 +453,27 @@ function handle_options_menu_input(menu_items)
 			end
 		end
 	end
+end
+
+-- instruction menu scrolling thingy done by ChatGPT
+-- globals for instructions menu
+instr_scroll = 0
+INSTR_SCROLL_SPEED = 5
+INSTR_MAX_Y = 0 -- calculated dynamically after drawing all text
+
+function handle_instruction_menu_input()
+    -- scroll instructions up/down
+    if btnp(2) then -- up
+        instr_scroll = max(instr_scroll - INSTR_SCROLL_SPEED, 0)
+    elseif btnp(3) then -- down
+        instr_scroll = min(instr_scroll + INSTR_SCROLL_SPEED, INSTR_MAX_Y)
+    end
+
+    -- go back to main menu
+    if btnp(5) then -- X
+        current_menu = 0
+        menu_index = 1
+    end
 end
 
 function move(player, world)
@@ -740,7 +771,61 @@ function draw_options_menu()
 end
 
 function draw_instructions_menu()
+    cls()
 
+    local function print_wrapped(text, x, y, col, max_chars)
+        local words = split(text, " ")
+        local line = ""
+        local line_y = y
+        local last_y = y
+
+        for w in all(words) do
+            local test_line = line == "" and w or line.." "..w
+            if #test_line > max_chars then
+                -- only print if above black area
+                if line_y - instr_scroll < 96 then
+                    print(line, x, line_y - instr_scroll, col)
+                end
+                line = w
+                line_y += 8
+            else
+                line = test_line
+            end
+            last_y = line_y
+        end
+
+        if line ~= "" and line_y - instr_scroll < 96 then
+            print(line, x, line_y - instr_scroll, col)
+            last_y = line_y + 8
+        end
+
+        return last_y
+    end
+
+    local y = 12
+
+    -- instructions text
+    y = print_wrapped("wELCOME TO THE DARK CAVE OF THE wUMPUS, USE THE ARROW KEYS TO MOVE!", 4, y, 7, 31)
+    y += 8
+    y = print_wrapped("wATCH YOUR STEP! bOTTOMLESS PITS PLAGUE THESE CAVERNS. THEIR COLD BREEZE INDICATES ADJACENT DANGER.", 4, y, 7, 31)
+    y += 8
+    y = print_wrapped("bEWARE THE wUMPUS! iF YOU ENTER ITS TILE IT WILL DEVOUR YOU! ITS TERRIBLE STENCH REVEALS ITS LOCATION NEARBY. yOU CAN, HOWEVER, SHOOT AT A wUMPUS WITH z TO KILL IT", 4, y, 7, 31)
+    y += 8
+    y = print_wrapped("cOLLECT ALL THE SHINY GOLD! iTS GLITTER HINTS AT NEARBY TREASURES.", 4, y, 7, 31)
+    y += 8
+    y = print_wrapped("iF YOU KILL ALL THE wUMPUS (OR COLLECT ALL GOLD IF ARROWS RUN OUT) YOU WIN!", 4, y, 7, 31)
+    y += 8
+    y = print_wrapped("gOOD LUCK, EXPLORER...", 4, y, 7, 31)
+    y += 8
+
+    -- store max scrollable value
+    INSTR_MAX_Y = max(0, y - 90)
+
+    -- fill everything at y >= 96 with black
+    rectfill(0, 92, 127, 127, 0)
+
+    -- draw back message
+    print("❎ to go back, ⬆️⬇️ to sroll", 4, 96, 7)
 end
 
 function draw_dead(player, world)
