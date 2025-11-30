@@ -12,7 +12,7 @@ FLAG_BREEZE = 8 -- 2**3
 
 -- sprite ids
 sprites={
-	blank=0,
+	blank=1,
 	wumpus=32,
 	player=16,
 	facing_left=17,
@@ -50,7 +50,7 @@ options_menu_items={
 
 function _init()
 -- runs once at the start
-	menu_index=0
+	menu_index=1
 	current_menu=0 -- start at main menu
 	state=0
 end
@@ -58,7 +58,7 @@ end
 function _update()
 -- runs 30 times per second
     if state==2 or state==-1 then -- dead or win
-        handle_game_end_input()
+        handle_game_end_input(world)
     elseif state==1 then -- alive
         handle_alive_input(player,world)
     else -- state==0, in menu
@@ -101,6 +101,8 @@ function game_start()
 	player=make_player(world)
 
 	state=1
+
+	see_cell(player,world)
 
 end
 
@@ -152,7 +154,6 @@ function make_empty_world(m, n)
 	end
 	
 	world[1][1].tile=0
-	world[1][1].flags=world[1][1].flags | FLAG_VISIBLE
 
 	world.wumpus_amount=0
 	world.gold_amount=0
@@ -385,13 +386,34 @@ end
 -->8
 -- gameplay
 
-function handle_game_end_input()
+function handle_game_end_input(world)
 -- handles the player input when they are in-between games, they either won or died
     if btnp(4) then -- player presses Z (play again)
         game_start()
     elseif btnp(5) then -- player presses X (back to menu)
         state=0
     end
+
+	handle_game_end_camera(world)
+end
+
+function handle_game_end_camera(world)
+    -- camera moves, player stays still
+    local m = #world
+    local n = #world[1]
+
+    -- scroll speed
+    local speed = 2
+
+    -- allow camera movement
+    if btn(0) then camx -= speed end  -- left
+    if btn(1) then camx += speed end  -- right
+    if btn(2) then camy -= speed end  -- up
+    if btn(3) then camy += speed end  -- down
+
+    -- clamp cam to world bounds (prevents showing beyond walls)
+    camx = mid( -8, camx, m*8 - 128 + 8 )
+    camy = mid( -8, camy, n*8 - 128 + 8 )
 end
 
 function handle_alive_input(player, world)
@@ -537,10 +559,11 @@ function move(player, world)
 
 			if world[new_i][new_j].tile==1 then -- check for gold in the tile
 				collect_gold(player,world,new_i,new_j)
-            elseif world[new_i][new_j].tile==-1 or world[new_i][new_j].tile==-2 then -- check for a wumpus or pit in this tile
-                lose()
-            end
-
+            elseif world[new_i][new_j].tile==-1 then -- check for a wumpus in this tile
+				end_game(world,-1,-1) -- change the games state to "dead" (-1) for the reason "killed by wumpus" (-1)
+			elseif world[new_i][new_j].tile==-2 then  -- check for a pit in this tile
+				end_game(world,-1,-2) -- change the games state to "dead" (-1) for the reason "fell into a pit" (-2)
+			end
 			see_cell(player,world)
 		end
 	end
@@ -623,7 +646,7 @@ function kill_wumpus(player, world, i, j)
 	player.score+=1000
 
 	if world.wumpus_amount==0 then
-	    win()
+		end_game(world,2,-1) -- Change the game state to "win" (2) for the reason "all wumpuses slain" (-1)
     end
 end
 
@@ -644,58 +667,275 @@ function collect_gold(player, world, i, j)
 	player.score+=500
 
 	if world.gold_amount==0 and player.arrows==0 then
-	   win()
+		end_game(world,2,1) -- Change the game state to "win" (2) for the reason "all gold collected" (1)
     end
 end
 
-function win()
-   state=2 -- game clear state
+function end_game(world, new_state, reason)
+	state=new_state
+	game_end_reason=reason
+	see_all_tiles(world)
 end
 
-function lose()
-    state=-1 -- dead state
+function see_all_tiles(world)
+	local m=#world
+	local n=#world[1]
+	for i=1,m do
+		for j=1,n do
+			world[i][j].flags=world[i][j].flags | FLAG_VISIBLE
+		end
+	end
 end
 
 -->8
 -- visuals
 
-function draw_win(player)
--- game clear visuals
+camx = 0
+camy = 0
+function follow_soft(target, cam)
+    return cam + (target - cam) * 0.5
 end
 
 function draw_alive(player, world)
 -- game visuals
 	cls()
+
+	local target_camx = (player.j * 8) - 64
+	local target_camy = (player.i * 8) - 64
+
+	camx = follow_soft(target_camx, camx)
+	camy = follow_soft(target_camy, camy)
+
+	camera(camx, camy)
+
+	
     local m=#world
     local n=#world[1]
+	for i=1,m do
+		for j=1,n do
+			if world[i][j].flags & FLAG_VISIBLE ~=0 then
+				draw_tile(player,world,i,j)
+			end
+		end
+	end
+
+	draw_bounds(m,n)
+
+	camera()
+
+end
+
+function draw_bounds(m,n)
+-- draw walls around the map
+    for i=1,m do
+        -- top wall
+        spr(sprites.wall, (i-1)*8, -8)
+        -- bottom wall
+        spr(sprites.wall, (i-1)*8, n*8)
+    end
+
+    for j=1,n do
+		-- left wall
+        spr(sprites.wall, -8, (j-1)*8)
+        -- right wall
+        spr(sprites.wall, m*8, (j-1)*8)
+    end
+end
+
+function draw_win(player)
+-- game clear visuals
+	cls()
+
+	camera(camx,camy)
+
+    local m=#world
+    local n=#world[1]
+	for i=1,m do
+		for j=1,n do
+			draw_tile(player,world,i,j)
+		end
+	end
+
+	draw_bounds(m,n)
+
+	camera()
+
+	-- This part with the text boxes was designed with ChatGPT
+
+	-- center X
+	local cx = 64
+
+	-- starting Y for first box
+	local y = 40
+
+	---------------------------
+	-- BOX 1
+	local txt1 = "you win!"
+	local x1 = cx - (#txt1 * 2)    -- center calculation
+	rectfill(x1-2, y-2, x1 + #txt1*4 + 2, y+6, 0)
+	print(txt1, x1, y, 7)
+	y += 12   -- move down for next box
+
+	if game_end_reason==-1 then
+		---------------------------
+		-- BOX 2
+		local txt2 = "yOU SLAYED EVERY wUMPUS"
+		local x2 = cx - (#txt2 * 2)
+		rectfill(x2-2, y-2, x2 + #txt2*4 + 2, y+6, 0)
+		print(txt2, x2, y, 7)
+		y += 12
+	else 
+		---------------------------
+		-- BOX 2
+		local txt2 = "yOU COLLECTED ALL GOLD"
+		local x2 = cx - (#txt2 * 2)
+		rectfill(x2-2, y-2, x2 + #txt2*4 + 2, y+6, 0)
+		print(txt2, x2, y, 7)
+		y += 12
+	end
+
+	---------------------------
+	-- BOX 3
+	local txt3 = "score: "..player.score
+	local x3 = cx - (#txt3 * 2)
+	rectfill(x3-2, y-2, x3 + #txt3*4 + 2, y+6, 0)
+	print(txt3, x3, y, 7)
+
+    local base_y = 100
+
+	-- BOX 4
+	local txt4 = "pRESS Z TO PLAY AGAIN"
+	rectfill(0, base_y, #txt4*4 + 4, base_y+8, 0)
+	print(txt4, 2, base_y+2, 7)
+	base_y += 10
+
+	-- BOX 5
+	local txt5 = "pRESS ❎ TO RETURN TO mAIN mENU"
+	rectfill(0, base_y, #txt5*4 + 8, base_y+8, 0)
+	print(txt5, 2, base_y+2, 7)
+	base_y += 10
+end
+
+function draw_dead(player, world)
+-- dead player visuals
+	cls()
+
+	camera(camx,camy)
+
+    local m=#world
+    local n=#world[1]
+	for i=1,m do
+		for j=1,n do
+			draw_tile(player,world,i,j)
+		end
+	end
+
+	draw_bounds(m,n)
+
+	camera()
+
+	-- This part with the text boxes was designed with ChatGPT
+
+	-- center X
+	local cx = 64
+
+	-- starting Y for first box
+	local y = 40
+
+	---------------------------
+	-- BOX 1
+	local txt1 = "you died!"
+	local x1 = cx - (#txt1 * 2)    -- center calculation
+	rectfill(x1-2, y-2, x1 + #txt1*4 + 2, y+6, 0)
+	print(txt1, x1, y, 7)
+	y += 12   -- move down for next box
+
+	if game_end_reason==-1 then
+		---------------------------
+		-- BOX 2
+		local txt2 = "tHE wUMPUS KILLED YOU"
+		local x2 = cx - (#txt2 * 2)
+		rectfill(x2-2, y-2, x2 + #txt2*4 + 2, y+6, 0)
+		print(txt2, x2, y, 7)
+		y += 12
+	else 
+		---------------------------
+		-- BOX 2
+		local txt2 = "yOU FELL IN A PIT"
+		local x2 = cx - (#txt2 * 2)
+		rectfill(x2-2, y-2, x2 + #txt2*4 + 2, y+6, 0)
+		print(txt2, x2, y, 7)
+		y += 12
+	end
+
+	---------------------------
+	-- BOX 3
+	local txt3 = "score: "..player.score
+	local x3 = cx - (#txt3 * 2)
+	rectfill(x3-2, y-2, x3 + #txt3*4 + 2, y+6, 0)
+	print(txt3, x3, y, 7)
+
+    local base_y = 100
+
+	-- BOX 4
+	local txt4 = "pRESS Z TO TRY AGAIN"
+	rectfill(0, base_y, #txt4*4 + 4, base_y+8, 0)
+	print(txt4, 2, base_y+2, 7)
+	base_y += 10
+
+	-- BOX 5
+	local txt5 = "pRESS ❎ TO RETURN TO mAIN mENU"
+	rectfill(0, base_y, #txt5*4 + 8, base_y+8, 0)
+	print(txt5, 2, base_y+2, 7)
+	base_y += 10
 end
 
 function draw_tile(player, world, i, j)
 -- logic for rendering each individual tile
 
-	local cell=world[i][j]
-	local sprite_id=nil
 	local player_sprite=sprites.blank
+	local facing_sprite=sprites.blank
+	local tile_sprite=sprites.blank
+	local cell=world[i][j]
 
-	if player.i==i and player.j==j then
-		if cell.tile==0 then -- safe tile
-			if player.facing==0 then
-				player_sprite=sprites.facing_left
-			elseif player.facing==1 then
-				player_sprite=sprites.facing_right
-			elseif player.facing==2 then
-				player_sprite=sprites.facing_up
-			else
-				player_sprite=sprites.facing_down
+	if cell.tile==nil then
+		tile_sprite=sprites.wall
+	else
+		if player.i==i and player.j==j then
+			if cell.tile==0 then -- safe tile
+				player_sprite=sprites.player
+				if player.facing==0 then
+					facing_sprite=sprites.facing_left
+				elseif player.facing==1 then
+					facing_sprite=sprites.facing_right
+				elseif player.facing==2 then
+					facing_sprite=sprites.facing_up
+				else
+					facing_sprite=sprites.facing_down
+				end
+			elseif cell.tile==-1 then -- wumpus here
+				player_sprite=sprites.player_wumpus
+			elseif cell.tile==-2 then -- pit here
+				player_sprite=sprites.player_pit
 			end
-		elseif cell.tile==-1 then -- wumpus here
-			sprite_id=sprites.player_wumpus
-		elseif cell.tile==-2 then -- pit here
-			sprite_id=sprites.player_pit
+		end
+		if cell.tile==1 then
+			tile_sprite=sprites.gold
+		elseif cell.tile==-1 then
+			tile_sprite=sprites.wumpus
+		elseif cell.tile==-2 then
+			tile_sprite=sprites.pit
+		else
+			tile_sprite=cell.flags
 		end
 	end
 
-	if cell.
+	local x = (j - 1) * 8
+	local y = (i - 1) * 8
+
+	spr(tile_sprite,   x, y)
+	spr(player_sprite, x, y)
+	spr(facing_sprite, x, y)
 
 end
 
@@ -717,7 +957,7 @@ function draw_main_menu()
     cls() -- clear screen
 
     -- title
-    local title = "HUNT THE WUMPUS"
+    local title = "WUMPUS WORLD"
     local title_x = 64 - (#title*4) -- 4 pixels per char in Pico-8
     print(title, title_x, 10, 7)
 
@@ -810,7 +1050,9 @@ function draw_instructions_menu()
     y += 8
     y = print_wrapped("wATCH YOUR STEP! bOTTOMLESS PITS PLAGUE THESE CAVERNS. THEIR COLD BREEZE INDICATES ADJACENT DANGER.", 4, y, 7, 31)
     y += 8
-    y = print_wrapped("bEWARE THE wUMPUS! iF YOU ENTER ITS TILE IT WILL DEVOUR YOU! ITS TERRIBLE STENCH REVEALS ITS LOCATION NEARBY. yOU CAN, HOWEVER, SHOOT AT A wUMPUS WITH z TO KILL IT", 4, y, 7, 31)
+    y = print_wrapped("bEWARE THE wUMPUS! iF YOU ENTER ITS TILE IT WILL DEVOUR YOU! ITS TERRIBLE STENCH REVEALS ITS LOCATION NEARBY.", 4, y, 7, 31)
+    y += 8
+	y = print_wrapped("cHANGE THE DIRECTION YOU ARE FACING BY PRESSING DOWN ❎ AND AN ARROW KEY, THEN SHOOT AT A wUMPUS WITH Z TO KILL IT!", 4, y, 7, 31)
     y += 8
     y = print_wrapped("cOLLECT ALL THE SHINY GOLD! iTS GLITTER HINTS AT NEARBY TREASURES.", 4, y, 7, 31)
     y += 8
@@ -827,10 +1069,6 @@ function draw_instructions_menu()
 
     -- draw back message
     print("❎ to go back, ⬆️⬇️ to sroll", 4, 96, 7)
-end
-
-function draw_dead(player, world)
--- dead player visuals
 end
 
 __gfx__
