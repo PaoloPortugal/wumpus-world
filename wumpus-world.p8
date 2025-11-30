@@ -3,6 +3,15 @@ version 43
 __lua__
 -- main
 
+-- flag bit positions
+-- we basically use a bitwise OR to set a flag to true, a bitwise AND with negation to turn it off and a regular bitwise and to check if the flag is on as opposed to keeping like 72 booleans per tile (because we were running out of memory), now we keep just one int per tile
+FLAG_VISIBLE = 1 -- 2**0
+FLAG_GLITTER = 2 -- 2**1
+FLAG_STENCH = 4 -- 2**2
+FLAG_BREEZE = 8 -- 2**3
+FLAG_COLLECTED_GOLD = 16 -- 2**4
+FLAG_DEAD_WUMPUS = 32 -- 2**5
+
 function _init()
 -- runs once at the start
 	menu_index=0
@@ -10,17 +19,17 @@ function _init()
 	state=0
 
 	main_menu_items={
-		{text="Play"},
-		{text="Options"},
-		{text="Instructions"}
+		{text="pLAY"},
+		{text="oPTIONS"},
+		{text="iNSTRUCTIONS"}
 	}
 
 	options_menu_items={
-		{text="Rows",value=20},
-		{text="Columns",value=20},
-		{text="Gold spawn probability (%)",value=10},
-		{text="Wumpus spawn probability (%)",value=5},
-		{text="Pit spawn probability (%)",value=20}
+		{text="rOWS",value=20},
+		{text="cOLUMNS",value=20},
+		{text="gOLD SPAWN",value=10},
+		{text="wUMPUS SPAWN",value=5},
+		{text="pIT SPAWN",value=20}
 	}
 end
 
@@ -115,18 +124,13 @@ function make_empty_world(m, n)
 		for j=1,n do
 			world[i][j]={
 				tile=nil,
-				visible=false,
-				glitter=false,
-				stench=false,
-				breeze=false,
-				collected_gold=false,
-				dead_wumpus=false
+				flags=0 -- all flags off
 			}
 		end
 	end
 	
 	world[1][1].tile=0
-	world[1][1].visible=true
+	world[1][1].flags=world[1][1].flags | FLAG_VISIBLE
 
 	world.wumpus_amount=0
 	world.gold_amount=0
@@ -310,11 +314,11 @@ function flag_adjacent_tiles(i, j, world)
 		if world[new_i] and world[new_i][new_j] and world[new_i][new_j].tile~=nil then -- checks the tile exists and that its not a wall
 			
 			if world[i][j].tile==1 then
-				world[new_i][new_j].glitter=true
+				world[new_i][new_j].flags=world[new_i][new_j].flags | FLAG_GLITTER
 			elseif world[i][j].tile==-1 then
-				world[new_i][new_j].stench=true
+				world[new_i][new_j].flags=world[new_i][new_j].flags | FLAG_STENCH
 			elseif world[i][j].tile==-2 then
-				world[new_i][new_j].breeze=true
+				world[new_i][new_j].flags=world[new_i][new_j].flags | FLAG_BREEZE
 			end
 				
 		end
@@ -412,8 +416,10 @@ function handle_main_menu_input(menu_items)
 			game_start()
 		elseif menu_index==2 then -- "Options" is selected
 			current_menu=1
+			menu_index=1
 		else -- menu_index==3, "Instructions" is selected
 			current_menu=2
+			menu_index=1
 		end
 	end
 end
@@ -432,7 +438,7 @@ function handle_options_menu_input(menu_items)
 				menu_items[menu_index].value+=1
 			end
 		else
-			if menu_items[menu_index].value<100 then
+			if menu_items[menu_index].value<50 then
 				menu_items[menu_index].value+=1
 			end
 		end
@@ -493,14 +499,14 @@ function see_cell(player, world)
 	local i=player.i
 	local j=player.j
 
-	world[i][j].visible=true
+	world[i][j].flags=world[i][j].flags | FLAG_VISIBLE
 
 	for _,delta in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
 		local adj_i=i+delta[1]
 		local adj_j=j+delta[2]
 
 		if world[adj_i] and world[adj_i][adj_j] and world[adj_i][adj_j].tile==nil then
-			world[adj_i][adj_j].visible=true -- if an adjacent cell is a wall we make it visible as well
+			world[adj_i][adj_j].flags=world[adj_i][adj_j].flags | FLAG_VISIBLE -- if an adjacent cell is a wall we make it visible as well
 		end
 	end
 end
@@ -548,8 +554,8 @@ end
 function kill_wumpus(player, world, i, j)
 -- kills a wumpus on the target (i, j)
 	world[i][j].tile=0 -- now its a safe tile
-	world[i][j].dead_wumpus=true
-	world[i][j].visible=true
+	world[i][j].flags=world[i][j].flags | FLAG_DEAD_WUMPUS
+	world[i][j].flags=world[i][j].flags | FLAG_VISIBLE
 
 	world.wumpus_amount-=1
 
@@ -558,7 +564,7 @@ function kill_wumpus(player, world, i, j)
 		local adj_j=j+delta[2]
 
 		if world[adj_i] and world[adj_i][adj_j] then
-			world[adj_i][adj_j].stench=false -- we remove the stench from the adjacent tiles
+			world[adj_i][adj_j].flags=world[adj_i][adj_j].flags & ~FLAG_STENCH -- we remove the stench from the adjacent tiles
 		end
 	end
 
@@ -572,14 +578,15 @@ end
 function collect_gold(player, world, i, j)
 -- collects a gold bar on the target (i, j)
 	world[i][j].tile=0 -- now its a regular safe tile, no gold
-	world[i][j].collected_gold=true
+	world[i][j].flags=world[i][j].flags | FLAG_COLLECTED_GOLD
+	world.gold_amount-=1
 
 	for _,delta in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
 		local adj_i=i+delta[1]
 		local adj_j=j+delta[2]
 
 		if world[adj_i] and world[adj_i][adj_j] then
-			world[adj_i][adj_j].glitter=false -- we remove the glitter from the adjacent tiles
+			world[adj_i][adj_j].flags=world[adj_i][adj_j].flags & ~FLAG_GLITTER -- we remove the glitter from the adjacent tiles
 		end
 	end
 
@@ -600,6 +607,7 @@ end
 
 -->8
 -- visuals
+-- The visuals display was done with ChatGPT as well as I did not feel like learning how to do the menus right now
 
 function draw_win(player)
 -- game clear visuals
@@ -617,7 +625,7 @@ function draw_alive(player, world)
             local c=" "
             local col=7 -- default color
 
-            if cell.visible then
+            if cell.flags & FLAG_VISIBLE ~= 0 then
                 if player.i==i and player.j==j then
                     c="@"
                     col=8
@@ -639,13 +647,13 @@ function draw_alive(player, world)
                 end
 
                 if player.i~=i or player.j~=j then
-                    if cell.glitter then
+                    if cell.flags & FLAG_GLITTER ~= 0 then
                         c="*"
                         col=11
-                    elseif cell.stench then
+                    elseif cell.flags & FLAG_STENCH ~= 0 then
                         c="^"
                         col=9
-                    elseif cell.breeze then
+                    elseif cell.flags & FLAG_BREEZE ~= 0 then
                         c="~"
                         col=12
                     end
@@ -688,39 +696,48 @@ function draw_main_menu()
         local color = (menu_index == i) and 8 or 7
         print(item.text, text_x, menu_y, color)
         menu_y += 10
-end
+	end
 
 end
 
 function draw_options_menu()
-    cls()  -- clear screen
+    cls() -- clear screen
 
-    -- draw each option
     for i, item in ipairs(options_menu_items) do
-        local y = 24 + (i-1)*10  -- vertical spacing
+        local y = 16 + (i-1)*8 -- tighter vertical spacing
 
         -- highlight selected
         if menu_index == i then
-            rectfill(10, y-1, 118, y+7, 3)  -- highlight background
+            rectfill(0, y-1, 127, y+7, 3) -- highlight background
             print("▶", 2, y, 7)
         end
 
         -- option name
-        print(item.text, 16, y, 7)
+        print(item.text, 10, y, 7)
 
-        -- option value as slider
-        local slider_x = 100
-        print(tostr(item.value), slider_x, y, 7)
+        -- slider visuals
+        local slider_max = 100
+        if i <= 2 then slider_max = 50 end -- first two options are rows/cols
 
-        -- optional: small visual slider bar
-        rect(90, y, 98, y+6, 7)
-        rectfill(90, y, 90 + flr(item.value/10), y+6, 8)
+        local value = item.value
+        if value > slider_max then value = slider_max end
+
+        local slider_width = 30
+        local slider_x = 90
+
+        rect(slider_x, y, slider_x + slider_width, y + 6, 7) -- outline
+        rectfill(slider_x, y, slider_x + flr((value/slider_max)*slider_width), y + 6, 8) -- filled slider
+
+        -- print value to the left of slider
+        local display_value = tostring(value)
+        if i >= 3 then
+            display_value = display_value .. "%" -- add % for last 3 sliders
+        end
+        print(display_value, slider_x - (#display_value*4) - 2, y, 7)
     end
 
-    -- instruction at bottom
-    print("Use arrow keys to adjust, X to go back", 8, 90, 7)
+    print("⬅️ ➡️ to adjust, ❎ to go back", 8, 96, 7)
 end
-
 
 function draw_instructions_menu()
 
