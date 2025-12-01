@@ -676,7 +676,21 @@ function collect_gold(player, world, i, j)
 		local adj_j=j+delta[2]
 
 		if world[adj_i] and world[adj_i][adj_j] then
-			world[adj_i][adj_j].flags=world[adj_i][adj_j].flags & ~FLAG_GLITTER -- we remove the glitter from the adjacent tiles
+
+			n_gold=false
+			for _,d in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
+				local n_i=adj_i+d[1]
+				local n_j=adj_j+d[2]
+
+				if world[n_i] and world[n_i][n_j] and world[n_i][n_j].tile==1 then
+					n_gold=true
+					break
+				end
+			end
+
+			if not n_gold then
+				world[adj_i][adj_j].flags=world[adj_i][adj_j].flags & ~FLAG_GLITTER -- we remove the glitter from the adjacent tiles
+			end
 		end
 	end
 
