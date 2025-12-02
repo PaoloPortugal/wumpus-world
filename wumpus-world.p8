@@ -47,7 +47,8 @@ sprites={
 main_menu_items={
 	{text="pLAY"},
 	{text="oPTIONS"},
-	{text="iNSTRUCTIONS"}
+	{text="iNSTRUCTIONS"},
+	{text="cREDITS"}
 }
 
 options_menu_items={
@@ -62,6 +63,7 @@ function _init()
 -- runs once at the start
 	menu_index=1
 	current_menu=0 -- start at main menu
+
 	state=0
 end
 
@@ -126,6 +128,8 @@ function game_start()
 	stage = 0, -- 0=tile1, 1=tile2, 2=tile3(dead)
 	death_type = 0 -- -1 for wumpus, -2 for pit
 	}
+
+	music(0) -- start the song
 
 end
 
@@ -466,7 +470,7 @@ function handle_general_menu_input()
         return
     end
 
-    if current_menu == 2 then
+    if current_menu == 2 or current_menu == 3 then
         -- instruction menu scrolling
         handle_instruction_menu_input()
         return
@@ -493,8 +497,11 @@ function handle_main_menu_input(menu_items)
 		elseif menu_index==2 then -- "Options" is selected
 			current_menu=1
 			menu_index=1
-		else -- menu_index==3, "Instructions" is selected
+		elseif menu_index==3 then -- "Instructions" is selected
 			current_menu=2
+			menu_index=1
+		else -- menu_index==4, "Credits" is selected
+			current_menu=3
 			menu_index=1
 		end
 	end
@@ -598,10 +605,9 @@ function see_cell(player, world)
 -- makes the cell the player stepped into visible
 	local i=player.i
 	local j=player.j
+	world[i][j].flags=world[i][j].flags | FLAG_VISIBLE
 
-	if world[i][j].flags & FLAG_VISIBLE == 0 then
-
-		world[i][j].flags=world[i][j].flags | FLAG_VISIBLE
+	if world[i][j].came_from==nil then
 
 		if player.last_i<player.i then -- came from left
 			world[i][j].came_from=0
@@ -613,15 +619,15 @@ function see_cell(player, world)
 			world[i][j].came_from=3
 		end
 
-		for _,delta in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
-			local adj_i=i+delta[1]
-			local adj_j=j+delta[2]
+	end
 
-			if world[adj_i] and world[adj_i][adj_j] and world[adj_i][adj_j].tile==nil then
-				world[adj_i][adj_j].flags=world[adj_i][adj_j].flags | FLAG_VISIBLE -- if an adjacent cell is a wall we make it visible as well
-			end
+	for _,delta in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
+		local adj_i=i+delta[1]
+		local adj_j=j+delta[2]
+
+		if world[adj_i] and world[adj_i][adj_j] and world[adj_i][adj_j].tile==nil then
+			world[adj_i][adj_j].flags=world[adj_i][adj_j].flags | FLAG_VISIBLE -- if an adjacent cell is a wall we make it visible as well
 		end
-
 	end
 end
 
@@ -647,6 +653,7 @@ function shoot_arrow(player, world)
 
 			if world[target_i][target_j].tile~=nil then
 				player.arrows-=1
+				sfx(5)
 
 				while world[target_i] and world[target_i][target_j] do
 
@@ -671,6 +678,8 @@ function kill_wumpus(player, world, i, j)
 	world[i][j].flags=world[i][j].flags | FLAG_VISIBLE
 
 	world.wumpus_amount-=1
+
+	sfx(4)
 
 	for _,delta in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
 		local adj_i=i+delta[1]
@@ -706,6 +715,8 @@ function collect_gold(player, world, i, j)
 -- collects a gold bar on the target (i, j)
 	world[i][j].tile=0 -- now its a regular safe tile, no gold
 	world.gold_amount-=1
+
+	sfx(2)
 
 	for _,delta in ipairs({{1,0},{-1,0},{0,1},{0,-1}}) do
 		local adj_i=i+delta[1]
@@ -811,6 +822,8 @@ function end_game(world, new_state, reason)
 		start_death_animation()
 	end
 	see_all_tiles(world)
+
+	music(-1)
 end
 
 function see_all_tiles(world)
@@ -1089,6 +1102,7 @@ function draw_death_animation()
 		else
 			draw_large_sprite(sprites.player_pit_for_anim, start_x + tile_size * 2, start_y, tile_size)
 		end
+		sfx(3)
 	end
 end
 
@@ -1198,9 +1212,11 @@ function draw_menu()
         draw_main_menu()
     elseif current_menu == 1 then -- Options
         draw_options_menu()
-    else -- current_menu==2, Instructions
+	elseif current_menu==2 then -- Instructions
         draw_instructions_menu()
-    end
+	else -- current_menu==3, Credits
+		draw_credits_menu()
+	end
 end
 
 
@@ -1413,6 +1429,23 @@ function draw_instructions_menu()
     print("❎ TO GO BACK, ⬆️⬇️ TO SCROLL", 4, 96, 7)
 end
 
+function draw_credits_menu()
+    cls()
+
+    -- top-left credits with extra spacing
+    local y = 8      -- space before first line
+    print("gAME BY: pAOLO \"MOOFYS\" pORTUGAL", 2, y)
+
+    y += 10          -- extra gap before the next group
+    print("mUSIC:", 2, y)
+    print("  bY: gRUBER", 2, y+6)
+    print("  fROM: pICO-8 tUNES vOL. 2", 2, y+12)
+
+    -- bottom-left instruction
+    print("❎ TO GO BACK", 2, 118)
+end
+
+
 __gfx__
 0000000000000000000000000a00000000000000b000bbb000000000b000bbb000000000c000ccc000000000c000ccc000000000c000ccc000000000c000ccc0
 000000000000000000000000a7a0000000000000bb0bb0bb00000000bb0bb0bb00000000cc0cc0cc00000000cc0cc0cc00000000cc0cc0cc00000000cc0cc0cc
@@ -1578,3 +1611,26 @@ __label__
 
 __map__
 0000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+__sfx__
+000300280000000000246250000000000000000000000000246150000000000000000c30018625000000000018000180002430018000180001800024300180001800018000000000000000000000000000000000
+011000010017000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000002b0502f050320500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0010000017050110500c0500805004050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000002005022050240500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000002305000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000001305000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+012000000d9550d9450d9350d9251074510735107251071500845179451793517925179151791510745107350d9550d9450d9350d925107451073510725107150084417945179351792517915179150d9150d925
+011d0c20107151994519935199251991510045100351002510015179450f7250f7250f7150f715107151071510715199251992519915199150b0150b0250b7250b0150b7150b71517925179250f7250f7250f715
+012000001295512945129351292515745157351572515715008451094510935109251091510915157451573512955129451293512925157451573500844157251571519945199351992519915199150d9150d925
+011d0c20107151e9251e9251e9251e9151502515025150151501517925147251471514715147151571515715157151e9251e9251e9151e91515015150251572515015157151571519925199250f7250f7250f715
+0120000019945199350d925019451404014030147221471223925239350b9250b9451504015030157221571219945199350d925019451704019030197221971223925239350b9250b9451c0401e0301e7221e712
+012000001e9451e93512925069452104021030217222171228935289252891520040200421e0301e7221e7121e9451e935129250694521040210302572225712289452893528925289151c0301e0201e7121e712
+__music__
+01 08094344
+00 08094344
+00 0a0b4344
+00 080c4344
+00 080c4344
+02 0a0d4344
+
