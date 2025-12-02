@@ -359,9 +359,9 @@ end
 function make_player(world)
 -- makes a new player character
 
-	local arrows=world.wumpus_amount
+	local arrows=ceil(world.wumpus_amount*1.25) -- lets give the player some more arrows than just the amount of wumpuses to account for guessing-required scenarios
 
-	local player={i=1,j=1,facing=3,arrows=arrows,score=0} -- the player starts at spawn, facing down, with the same amount of arrows as wumpuses in the world, with 0 score
+	local player={i=1,j=1,facing=3,arrows=arrows,score_lo=0,score_hi = 0} -- the player starts at spawn, facing down, with the arrows we defined before, with 0 score
 
 	return player
 
@@ -659,7 +659,7 @@ function kill_wumpus(player, world, i, j)
 		end
 	end
 
-	player.score+=1000
+	add_score(player,1000)
 
 	if world.wumpus_amount==0 then
 		end_game(world,2,-1) -- Change the game state to "win" (2) for the reason "all wumpuses slain" (-1)
@@ -694,11 +694,29 @@ function collect_gold(player, world, i, j)
 		end
 	end
 
-	player.score+=500
+	add_score(player,500)
 
 	if world.gold_amount==0 and player.arrows==0 then
 		end_game(world,2,1) -- Change the game state to "win" (2) for the reason "all gold collected" (1)
     end
+end
+
+function add_score(player, amount)
+    -- low 16 bits
+    local lo = band(player.score_lo + amount, 0xffff)
+
+    -- detect overflow: if wrapped, carry to high
+    local carry = (lo < player.score_lo) and 1 or 0
+
+    player.score_lo = lo
+    player.score_hi = band(player.score_hi + carry, 0xffff)
+end
+
+function get_score(player)
+    return bor(
+        player.score_lo,
+        shl(player.score_hi, 16)
+    )
 end
 
 function end_game(world, new_state, reason)
@@ -762,7 +780,7 @@ function draw_alive(player, world)
 	base_y += 10
 
 	-- BOX 5
-	local txt2 = "sCORE: "..player.score
+	local txt2 = "sCORE: "..get_score(player)
 	rectfill(0, base_y, #txt2*4 + 8, base_y+8, 0)
 	print(txt2, 2, base_y+2, 7)
 	base_y += 10
@@ -841,7 +859,7 @@ function draw_win(player)
 
 	---------------------------
 	-- BOX 3
-	local txt3 = "score: "..player.score
+	local txt3 = "score: "..get_score(player)
 	local x3 = cx - (#txt3 * 2)
 	rectfill(x3-2, y-2, x3 + #txt3*4 + 2, y+6, 0)
 	print(txt3, x3, y, 7)
@@ -915,7 +933,7 @@ function draw_dead(player, world)
 
 	---------------------------
 	-- BOX 3
-	local txt3 = "score: "..player.score
+	local txt3 = "score: "..get_score(player)
 	local x3 = cx - (#txt3 * 2)
 	rectfill(x3-2, y-2, x3 + #txt3*4 + 2, y+6, 0)
 	print(txt3, x3, y, 7)
