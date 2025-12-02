@@ -802,16 +802,22 @@ function draw_alive(player, world)
 
     local base_y = 100
 
-	-- BOX 4
-	local txt1 = "aRROWS: "..player.arrows
+	-- BOX 1
+	local txt1 = "aRROWS LEFT: "..player.arrows
 	rectfill(0, base_y, #txt1*4 + 4, base_y+8, 0)
 	print(txt1, 2, base_y+2, 7)
 	base_y += 10
 
-	-- BOX 5
-	local txt2 = "sCORE: "..get_score(player)
-	rectfill(0, base_y, #txt2*4 + 8, base_y+8, 0)
+	-- BOX 2
+	local txt2 = "gOLD LEFT TO COLLECT:"..world.gold_amount
+	rectfill(0, base_y, #txt2*4 + 4, base_y+8, 0)
 	print(txt2, 2, base_y+2, 7)
+	base_y += 10
+
+	-- BOX 3
+	local txt3 = "sCORE: "..get_score(player)
+	rectfill(0, base_y, #txt3*4 + 8, base_y+8, 0)
+	print(txt3, 2, base_y+2, 7)
 	base_y += 10
 
 	draw_messages()
@@ -1070,21 +1076,20 @@ end
 
 function draw_main_menu()
     cls() -- clear screen
-
     -- title
     local title = "wUMPUS wORLD"
-    local title_x = 64 - (#title*4) -- 4 pixels per char in Pico-8
+    local title_x = 64 - (#title*4)/2 -- center it properly
     print(title, title_x, 10, 7)
-
     -- menu items
     local menu_y = 50
     for i, item in ipairs(main_menu_items) do
-        local text_x = 64 - (#item.text*4)
+        local text_x = 64 - (#item.text*4)/2 -- center it properly
         local color = (menu_index == i) and 8 or 7
         print(item.text, text_x, menu_y, color)
         menu_y += 10
-	end
-
+    end
+    print("🅾️ (z) TO CONFIRM", 4, 96, 7)
+    print("⬆️⬇️ TO SELECT", 4, 104, 7)
 end
 
 function draw_options_menu()
@@ -1123,132 +1128,132 @@ function draw_options_menu()
         print(display_value, slider_x - (#display_value*4) - 2, y, 7)
     end
 
-    print("⬅️ ➡️ to adjust, ❎ to go back", 8, 96, 7)
+    print("❎ TO GO BACK, ⬅️ ➡️ TO ADJUST", 8, 96, 7)
 end
 
 function draw_instructions_menu()
     cls()
 
 	-- this beauty of a function was fixed by Claude so it can now insert sprites automatically as well as do line breaks properly!
-local function print_wrapped(text, x, y, col)
-    local max_width = 124  -- 31 chars * 4 pixels per char
-    local words = split(text, " ")
-    local line = ""
-    local line_y = y
-    local last_y = y
-    local line_x = x
-    local line_width = 0  -- track pixel width
-    local sprite_on_line = false  -- track if we've drawn a sprite on current line
-    
-    for w in all(words) do
-        local is_sprite = false
-        local sprite_id = 0
-        local prefix = ""
-        local suffix = ""
-        
-        -- check if word contains {sprite:N}
-        local sprite_start = 0
-        local sprite_end = 0
-        
-        for i=1,#w-9 do
-            if sub(w, i, i+7) == "{sprite:" then
-                sprite_start = i
-                -- find closing }
-                for j=i+8,#w do
-                    if sub(w, j, j) == "}" then
-                        sprite_end = j
-                        break
-                    end
-                end
-                break
-            end
-        end
-        
-        if sprite_start > 0 and sprite_end > 0 then
-            prefix = sub(w, 1, sprite_start-1)
-            local num_str = sub(w, sprite_start+8, sprite_end-1)
-            suffix = sub(w, sprite_end+1, #w)
-            sprite_id = tonum(num_str)
-            if sprite_id != nil then
-                is_sprite = true
-            end
-        end
-        
-        if is_sprite then
-            -- calculate width needed for prefix
-            local prefix_width = #prefix * 4
-            if (line != "" or sprite_on_line) and prefix != "" then
-                prefix_width += 4  -- space before prefix
-            end
-            
-            -- check if prefix + sprite fits on current line
-            if line_width + prefix_width + 8 > max_width and (line != "" or sprite_on_line) then
-                -- doesn't fit, print current line and start new one
-                if line != "" and line_y - instr_scroll < 96 then
-                    print(line, line_x, line_y - instr_scroll, col)
-                end
-                line = ""
-                line_y += 8
-                line_x = x
-                line_width = 0
-                sprite_on_line = false
-                prefix_width = #prefix * 4  -- recalc without space
-            end
-            
-            -- add prefix to current line
-            if prefix != "" then
-                local test_line = (line == "" and not sprite_on_line) and prefix or line.." "..prefix
-                line = test_line
-                line_width += prefix_width
-            end
-            
-            -- print current line before sprite
-            if line != "" and line_y - instr_scroll < 96 then
-                print(line, line_x, line_y - instr_scroll, col)
-                line_x += line_width
-            end
-            
-            -- draw sprite
-            if line_y - instr_scroll < 96 and line_y - instr_scroll >= 0 then
-                spr(sprite_id, line_x, line_y - instr_scroll)
-            end
-            line_x += 8
-            line_width += 8
-            sprite_on_line = true
-            
-            -- handle suffix
-            line = suffix
-            if suffix != "" then
-                line_width += #suffix * 4
-            end
-        else
-            local word_width = #w * 4
-            local space_width = (line == "" and not sprite_on_line) and 0 or 4
-            
-            if line_width + space_width + word_width > max_width and (line != "" or sprite_on_line) then
-                if line != "" and line_y - instr_scroll < 96 then
-                    print(line, line_x, line_y - instr_scroll, col)
-                end
-                line = w
-                line_y += 8
-                line_x = x
-                line_width = word_width
-                sprite_on_line = false
-            else
-                local test_line = (line == "" and not sprite_on_line) and w or line.." "..w
-                line = test_line
-                line_width += space_width + word_width
-            end
-        end
-        last_y = line_y
-    end
-    
-    if line != "" and line_y - instr_scroll < 96 then
-        print(line, line_x, line_y - instr_scroll, col)
-        last_y = line_y + 8
-    end
-    return last_y
-end
+	local function print_wrapped(text, x, y, col)
+		local max_width = 124  -- 31 chars * 4 pixels per char
+		local words = split(text, " ")
+		local line = ""
+		local line_y = y
+		local last_y = y
+		local line_x = x
+		local line_width = 0  -- track pixel width
+		local sprite_on_line = false  -- track if we've drawn a sprite on current line
+		
+		for w in all(words) do
+			local is_sprite = false
+			local sprite_id = 0
+			local prefix = ""
+			local suffix = ""
+			
+			-- check if word contains {sprite:N}
+			local sprite_start = 0
+			local sprite_end = 0
+			
+			for i=1,#w-9 do
+				if sub(w, i, i+7) == "{sprite:" then
+					sprite_start = i
+					-- find closing }
+					for j=i+8,#w do
+						if sub(w, j, j) == "}" then
+							sprite_end = j
+							break
+						end
+					end
+					break
+				end
+			end
+			
+			if sprite_start > 0 and sprite_end > 0 then
+				prefix = sub(w, 1, sprite_start-1)
+				local num_str = sub(w, sprite_start+8, sprite_end-1)
+				suffix = sub(w, sprite_end+1, #w)
+				sprite_id = tonum(num_str)
+				if sprite_id != nil then
+					is_sprite = true
+				end
+			end
+			
+			if is_sprite then
+				-- calculate width needed for prefix
+				local prefix_width = #prefix * 4
+				if (line != "" or sprite_on_line) and prefix != "" then
+					prefix_width += 4  -- space before prefix
+				end
+				
+				-- check if prefix + sprite fits on current line
+				if line_width + prefix_width + 8 > max_width and (line != "" or sprite_on_line) then
+					-- doesn't fit, print current line and start new one
+					if line != "" and line_y - instr_scroll < 96 then
+						print(line, line_x, line_y - instr_scroll, col)
+					end
+					line = ""
+					line_y += 8
+					line_x = x
+					line_width = 0
+					sprite_on_line = false
+					prefix_width = #prefix * 4  -- recalc without space
+				end
+				
+				-- add prefix to current line
+				if prefix != "" then
+					local test_line = (line == "" and not sprite_on_line) and prefix or line.." "..prefix
+					line = test_line
+					line_width += prefix_width
+				end
+				
+				-- print current line before sprite
+				if line != "" and line_y - instr_scroll < 96 then
+					print(line, line_x, line_y - instr_scroll, col)
+					line_x += line_width
+				end
+				
+				-- draw sprite
+				if line_y - instr_scroll < 96 and line_y - instr_scroll >= 0 then
+					spr(sprite_id, line_x, line_y - instr_scroll)
+				end
+				line_x += 8
+				line_width += 8
+				sprite_on_line = true
+				
+				-- handle suffix
+				line = suffix
+				if suffix != "" then
+					line_width += #suffix * 4
+				end
+			else
+				local word_width = #w * 4
+				local space_width = (line == "" and not sprite_on_line) and 0 or 4
+				
+				if line_width + space_width + word_width > max_width and (line != "" or sprite_on_line) then
+					if line != "" and line_y - instr_scroll < 96 then
+						print(line, line_x, line_y - instr_scroll, col)
+					end
+					line = w
+					line_y += 8
+					line_x = x
+					line_width = word_width
+					sprite_on_line = false
+				else
+					local test_line = (line == "" and not sprite_on_line) and w or line.." "..w
+					line = test_line
+					line_width += space_width + word_width
+				end
+			end
+			last_y = line_y
+		end
+		
+		if line != "" and line_y - instr_scroll < 96 then
+			print(line, line_x, line_y - instr_scroll, col)
+			last_y = line_y + 8
+		end
+		return last_y
+	end
 
     local y = 12
 
@@ -1259,7 +1264,7 @@ end
     y += 8
     y = print_wrapped("bEWARE THE wUMPUS  {sprite:32}! iF YOU ENTER ITS TILE IT WILL DEVOUR YOU! ITS TERRIBLE STENCH  {sprite:5} REVEALS ITS LOCATION NEARBY.", 4, y, 7)
     y += 8
-	y = print_wrapped("cHANGE THE DIRECTION YOU ARE FACING BY PRESSING DOWN ❎ AND AN ARROW KEY, THEN SHOOT AT A wUMPUS WITH 🅾️ (z) TO KILL IT!", 4, y, 7)
+	y = print_wrapped("cHANGE THE DIRECTION YOU ARE FACING BY PRESSING DOWN ❎ AND AN ARROW KEY, THEN SHOOT AT A wUMPUS WITH 🅾️ (z) TO KILL IT! (TIP: yOU WILL GET ROUGHLY ONE FOURTH MORE ARROWS THAN THE AMOUNT OF wUMPUSES IN THE MAP!)", 4, y, 7)
     y += 8
     y = print_wrapped("cOLLECT ALL THE SHINY GOLD  {sprite:33}! iTS GLITTER  {sprite:3} HINTS AT NEARBY TREASURES.", 4, y, 7)
     y += 8
@@ -1275,7 +1280,7 @@ end
     rectfill(0, 92, 127, 127, 0)
 
     -- draw back message
-    print("❎ to go back, ⬆️⬇️ to sroll", 4, 96, 7)
+    print("❎ TO GO BACK, ⬆️⬇️ TO SCROLL", 4, 96, 7)
 end
 
 __gfx__
