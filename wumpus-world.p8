@@ -33,10 +33,12 @@ sprites={
 	stench_breeze_glitter=15,
 	pit=34,
 	gold=33,
-	player_pit=48,
-	player_wumpus=49,
-	wall=50,
-	footprint=17
+	player_pit=50,
+	player_wumpus=51,
+	wall=52,
+	footprint=17,
+	player_pit_for_anim=48,
+	player_wumpus_for_anim=49
 }
 
 -- menu items
@@ -68,9 +70,11 @@ function _update()
     elseif state==1 then -- alive
         handle_alive_input(player,world)
 		update_messages()
-    else -- state==0, in menu
+	elseif state==0 then -- in menu
         handle_general_menu_input(current_menu,menu_index)
-    end
+	else -- state==-2, on death animation screen
+		update_death_animation(player, world)
+	end
 end
 
 function _draw()
@@ -81,9 +85,11 @@ function _draw()
         draw_alive(player,world)
     elseif state==0 then -- in main menu
         draw_menu()
-    else -- state==-1, dead
+	elseif state==-1 then -- dead
         draw_dead(player,world)
-    end
+	else -- state==-2, on death animation screen
+		draw_death_animation()
+	end
 end
 
 -->8
@@ -112,6 +118,12 @@ function game_start()
 	see_cell(player,world)
 
 	messages={}
+
+	death_anim = {
+	timer = 0,
+	stage = 0, -- 0=tile1, 1=tile2, 2=tile3(dead)
+	death_type = 0 -- -1 for wumpus, -2 for pit
+	}
 
 end
 
@@ -748,9 +760,37 @@ function update_messages()
 	end
 end
 
+-- this death animation system was made by Claude
+
+function start_death_animation(death_type)
+-- initializes the death animation
+	state=-2 -- now we are on death_animation
+	death_anim.timer = 0
+	death_anim.stage = 0
+end
+
+function update_death_animation(player, world)
+-- updates the death animation state
+	death_anim.timer += 1
+	
+	if death_anim.timer >= 20 then -- 0.66... seconds at 30fps
+		death_anim.timer = 0
+		death_anim.stage += 1
+		
+		if death_anim.stage >= 3 then
+			-- animation complete, end game
+			see_all_tiles(world)
+			state = -1
+		end
+	end
+end
+
 function end_game(world, new_state, reason)
 	state=new_state
 	game_end_reason=reason
+	if new_state==-1 then
+		start_death_animation()
+	end
 	see_all_tiles(world)
 end
 
@@ -988,6 +1028,74 @@ function draw_dead(player, world)
 	rectfill(0, base_y, #txt5*4 + 8, base_y+8, 0)
 	print(txt5, 2, base_y+2, 7)
 	base_y += 10
+end
+
+-- again death animation system by Claude
+
+function draw_death_animation()
+-- draws the death animation sequence
+	cls(0) -- black background
+	
+	-- each tile is 42x42 pixels to fit 3 across (42*3 = 126, centered in 128)
+	local tile_size = 42
+	local start_x = (128 - tile_size * 3) / 2
+	local start_y = (128 - tile_size) / 2
+	
+	-- draw tile backgrounds first
+	rectfill(start_x, start_y, start_x + tile_size - 1, start_y + tile_size - 1, 0)
+	rectfill(start_x + tile_size, start_y, start_x + tile_size * 2 - 1, start_y + tile_size - 1, 0)
+	rectfill(start_x + tile_size * 2, start_y, start_x + tile_size * 3 - 1, start_y + tile_size - 1, 0)
+	
+	-- determine which sprites to show based on stage
+	if death_anim.stage == 0 then
+		-- player on tile 1, danger on tile 3
+		draw_large_sprite(sprites.player, start_x, start_y, tile_size)
+		if game_end_reason == -1 then
+			draw_large_sprite(sprites.wumpus, start_x + tile_size * 2, start_y, tile_size)
+		else
+			draw_large_sprite(sprites.pit, start_x + tile_size * 2, start_y, tile_size)
+		end
+	elseif death_anim.stage == 1 then
+		-- player on tile 2, danger on tile 3
+		draw_large_sprite(sprites.player, start_x + tile_size, start_y, tile_size)
+		if game_end_reason == -1 then
+			draw_large_sprite(sprites.wumpus, start_x + tile_size * 2, start_y, tile_size)
+		else
+			draw_large_sprite(sprites.pit, start_x + tile_size * 2, start_y, tile_size)
+		end
+	else -- stage >= 2
+		-- player dead on tile 3
+		if game_end_reason == -1 then
+			draw_large_sprite(sprites.player_wumpus_for_anim, start_x + tile_size * 2, start_y, tile_size)
+		else
+			draw_large_sprite(sprites.player_pit_for_anim, start_x + tile_size * 2, start_y, tile_size)
+		end
+	end
+end
+
+function draw_large_sprite(sprite_id, x, y, size)
+-- draws a sprite scaled up to fill a square area
+	if sprite_id == sprites.blank then
+		return -- don't draw blank tiles
+	end
+	
+	-- scale factor (8x8 sprite to size x size)
+	local scale = size / 8
+	
+	for py = 0, 7 do
+		for px = 0, 7 do
+			local col = sget(sprite_id % 16 * 8 + px, flr(sprite_id / 16) * 8 + py)
+			if col ~= 0 then -- don't draw transparent pixels
+				rectfill(
+					x + px * scale,
+					y + py * scale,
+					x + (px + 1) * scale - 1,
+					y + (py + 1) * scale - 1,
+					col
+				)
+			end
+		end
+	end
 end
 
 -- again message system by Claude
@@ -1308,14 +1416,14 @@ __gfx__
 990000990aaaaaa05111111507755770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 09000090777777770511115007777770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 90900909aaaaaaaa0055550000700700000000000000000000000000000660000000000000000000000000000000000000000000000000000000000000000000
-80dddd0889999998dddddddd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-08eeee809879978900d00d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-d282282d90899809dddddddd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-d758857d909889090d00d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-d778877d97788779dddddddd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-d787787d97877879000d00d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0871178028222282dddddddd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-80dddd0880eeee080d00d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00dddd000999999080dddd0889999998dddddddd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0deeeed09979979908eeee809879978900d00d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+d222222d90999909d282282d90899809dddddddd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+d757757d90977909d758857d909889090d00d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+d777777d97777779d778877d97788779dddddddd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+d775577d99577599d787787d99877899000d00d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0d7117d0292222920871178028222282dddddddd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00dddd00909ee90980dddd08809ee9080d00d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __label__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
