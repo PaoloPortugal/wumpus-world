@@ -67,6 +67,7 @@ function _update()
         handle_game_end_input(world)
     elseif state==1 then -- alive
         handle_alive_input(player,world)
+		update_messages()
     else -- state==0, in menu
         handle_general_menu_input(current_menu,menu_index)
     end
@@ -109,6 +110,8 @@ function game_start()
 	state=1
 
 	see_cell(player,world)
+
+	messages={}
 
 end
 
@@ -394,7 +397,7 @@ end
 
 function handle_game_end_input(world)
 -- handles the player input when they are in-between games, they either won or died
-    if btnp(4) then -- player presses Z (play again)
+    if btnp(4) then -- player presses 🅾️ (Z) (play again)
         game_start()
     elseif btnp(5) then -- player presses X (back to menu)
         state=0
@@ -426,7 +429,7 @@ function handle_alive_input(player, world)
 	move(player,world)
 
 	-- now let's see if the player wants to shoot an arrow
-	if btnp(4) then -- the player is pressing the fire key (Z)
+	if btnp(4) then -- the player is pressing the fire key (🅾️ or Z)
 		shoot_arrow(player,world)
 	end
 
@@ -468,7 +471,7 @@ function handle_general_menu_input()
 end
 
 function handle_main_menu_input(menu_items)
-	if btnp(4) then -- the player is pressing the "confirm" key (Z)
+	if btnp(4) then -- the player is pressing the "confirm" key (🅾️ or Z)
 		if menu_index==1 then -- "Play" is selected
 			game_start()
 		elseif menu_index==2 then -- "Options" is selected
@@ -659,6 +662,8 @@ function kill_wumpus(player, world, i, j)
 		end
 	end
 
+	add_message("a wUMPUS HAS BEEN SLAIN!")
+
 	add_score(player,1000)
 
 	if world.wumpus_amount==0 then
@@ -694,12 +699,16 @@ function collect_gold(player, world, i, j)
 		end
 	end
 
+	add_message("gOLD COLLECTED!")
+
 	add_score(player,500)
 
 	if world.gold_amount==0 and player.arrows==0 then
 		end_game(world,2,1) -- Change the game state to "win" (2) for the reason "all gold collected" (1)
     end
 end
+
+-- score management was done with ChatGPT to treat it as a 32 bit number
 
 function add_score(player, amount)
     -- low 16 bits
@@ -717,6 +726,26 @@ function get_score(player)
         player.score_lo,
         shl(player.score_hi, 16)
     )
+end
+
+-- this message system was made by Claude
+
+function add_message(text)
+-- adds a new message to the notification system
+	add(messages, {
+		text = text,
+		time = 150 -- 5 seconds at 30fps = 150 frames
+	})
+end
+
+function update_messages()
+-- updates message timers and removes expired ones
+	for i = #messages, 1, -1 do
+		messages[i].time -= 1
+		if messages[i].time <= 0 then
+			deli(messages, i)
+		end
+	end
 end
 
 function end_game(world, new_state, reason)
@@ -784,6 +813,8 @@ function draw_alive(player, world)
 	rectfill(0, base_y, #txt2*4 + 8, base_y+8, 0)
 	print(txt2, 2, base_y+2, 7)
 	base_y += 10
+
+	draw_messages()
 
 end
 
@@ -867,7 +898,7 @@ function draw_win(player)
     local base_y = 100
 
 	-- BOX 4
-	local txt4 = "pRESS Z TO PLAY AGAIN"
+	local txt4 = "pRESS 🅾️ (z) TO PLAY AGAIN"
 	rectfill(0, base_y, #txt4*4 + 4, base_y+8, 0)
 	print(txt4, 2, base_y+2, 7)
 	base_y += 10
@@ -941,7 +972,7 @@ function draw_dead(player, world)
     local base_y = 100
 
 	-- BOX 4
-	local txt4 = "pRESS Z TO TRY AGAIN"
+	local txt4 = "pRESS 🅾️ (z) TO TRY AGAIN"
 	rectfill(0, base_y, #txt4*4 + 4, base_y+8, 0)
 	print(txt4, 2, base_y+2, 7)
 	base_y += 10
@@ -951,6 +982,27 @@ function draw_dead(player, world)
 	rectfill(0, base_y, #txt5*4 + 8, base_y+8, 0)
 	print(txt5, 2, base_y+2, 7)
 	base_y += 10
+end
+
+-- again message system by Claude
+
+function draw_messages()
+-- draws all active messages stacked vertically
+	local y = 2
+	for msg in all(messages) do
+		local txt = msg.text
+		local txt_width = #txt * 4 + 4
+		local x = 128 - txt_width - 2 -- right-aligned
+		
+		-- background box
+		rectfill(x, y, 126, y + 8, 0)
+		
+		-- text
+		print(txt, x + 2, y + 2, 7)
+		
+		-- move down for next message
+		y += 10
+	end
 end
 
 function draw_tile(player, world, i, j)
@@ -1207,7 +1259,7 @@ end
     y += 8
     y = print_wrapped("bEWARE THE wUMPUS  {sprite:32}! iF YOU ENTER ITS TILE IT WILL DEVOUR YOU! ITS TERRIBLE STENCH  {sprite:5} REVEALS ITS LOCATION NEARBY.", 4, y, 7)
     y += 8
-	y = print_wrapped("cHANGE THE DIRECTION YOU ARE FACING BY PRESSING DOWN ❎ AND AN ARROW KEY, THEN SHOOT AT A wUMPUS WITH Z TO KILL IT!", 4, y, 7)
+	y = print_wrapped("cHANGE THE DIRECTION YOU ARE FACING BY PRESSING DOWN ❎ AND AN ARROW KEY, THEN SHOOT AT A wUMPUS WITH 🅾️ (z) TO KILL IT!", 4, y, 7)
     y += 8
     y = print_wrapped("cOLLECT ALL THE SHINY GOLD  {sprite:33}! iTS GLITTER  {sprite:3} HINTS AT NEARBY TREASURES.", 4, y, 7)
     y += 8
@@ -1243,9 +1295,9 @@ __gfx__
 00000000000000000000000000a000a000000000b000bbb000000000b0a0bbb000000000c000ccc000000000c0a0ccc000000000b000bbb000000000b0a0bbb0
 00000000000000000000000000000a7a00000000bb0bb0bb00000000bb0bb0bb00000000cc0cc0cc00000000cc0cc0cc00000000bb0bb0bb00000000bb0bb0bb
 000000000000000000000000000000a0000000000bb00000000000000bb00000000000000cc00000000000000cc00000000000000bb00000000000000bb00000
-09999990000000000055550000000000000000000000000000066000000000000000000000000000000000000000000000000000000000000000000000000000
-99799799000000000511115000eeee00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-9099990900777700511111150eeeeee0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+09999990000000000055550000222200000000000000000000066000000000000000000000000000000000000000000000000000000000000000000000000000
+9979979900000000051111500eeeeee0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+90999909007777005111111522222222000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 9097790900aaaa005111111507577570600000000000000600000000000000000000000000000000000000000000000000000000000000000000000000000000
 90099009077777705111111507777770600000000000000600000000000000000000000000000000000000000000000000000000000000000000000000000000
 990000990aaaaaa05111111507755770000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1253,11 +1305,11 @@ __gfx__
 90900909aaaaaaaa0055550000700700000000000000000000000000000660000000000000000000000000000000000000000000000000000000000000000000
 80dddd0889999998dddddddd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 08eeee809879978900d00d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-de8ee8ed90899809dddddddd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+d282282d90899809dddddddd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 d758857d909889090d00d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 d778877d97788779dddddddd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 d787787d97877879000d00d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0871178008eeee80dddddddd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0871178028222282dddddddd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 80dddd0880eeee080d00d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __label__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
